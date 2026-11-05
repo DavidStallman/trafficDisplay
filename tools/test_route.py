@@ -55,5 +55,5 @@ print(f"{ORIGIN} -> {DESTINATION}")
 print(f"  With traffic : {dur:.0f} min")
 print(f"  No traffic   : {static:.0f} min")
 print(f"  Distance     : {r['distanceMeters'] / 1609.344:.1f} mi via {r.get('description', '?')}")
-color = "GREEN" if dur < 40 else "YELLOW" if dur <= 50 else "RED"
+color = "GREEN" if dur < 45 else "YELLOW" if dur <= 55 else "RED"
 print(f"  Screen color : {color}")

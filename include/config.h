@@ -24,8 +24,8 @@
 //   < GREEN_MAX_MIN            -> green
 //   GREEN_MAX_MIN..YELLOW_MAX  -> yellow
 //   > YELLOW_MAX_MIN           -> red
-#define GREEN_MAX_MIN       40
-#define YELLOW_MAX_MIN      50
+#define GREEN_MAX_MIN       45
+#define YELLOW_MAX_MIN      55
 
 // Time zone (POSIX TZ string): US Pacific with DST
 #define TZ_INFO             "PST8PDT,M3.2.0,M11.1.0"

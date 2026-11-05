@@ -2,7 +2,7 @@
 //
 // Polls the Google Routes API every 10 minutes during the configured window
 // and shows the current drive time on a colored background:
-//   green < 40 min, yellow 40-50 min, red > 50 min.
+//   green < GREEN_MAX_MIN, yellow GREEN_MAX_MIN..YELLOW_MAX_MIN, red > YELLOW_MAX_MIN.
 //
 // Buttons:
 //   A (big front button)  : fetch now (works any time of day)
@@ -369,7 +369,7 @@ static void render() {
   time_t now = time(nullptr);
 
   if (g_demoIndex >= 0) {
-    static const int demoMins[] = {35, 45, 58};
+    static const int demoMins[] = {GREEN_MAX_MIN - 5, (GREEN_MAX_MIN + YELLOW_MAX_MIN) / 2, YELLOW_MAX_MIN + 5};
     RouteResult d;
     d.valid = true;
     d.durationSec = demoMins[g_demoIndex] * 60;

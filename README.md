@@ -7,9 +7,9 @@ That's 85 checks a day (about 1,850–1,950 a month), well under the free 5,000 
 
 | Drive time | Background |
 |---|---|
-| under 40 min | 🟩 green |
-| 40 – 50 min | 🟨 yellow |
-| over 50 min | 🟥 red |
+| under 45 min | 🟩 green |
+| 45 – 55 min | 🟨 yellow |
+| over 55 min | 🟥 red |
 
 Outside the window the screen dims and shows "Off hours" plus the last reading.
 
