@@ -43,6 +43,14 @@ static time_t g_manualUntil = 0;     // show the colored result off-hours until 
 static int g_demoIndex = -1;         // -1 = not in demo mode
 static uint32_t g_lastDrawMs = 0;
 
+static uint8_t targetBrightness() {
+  if (M5.getBoard() == m5::board_t::board_M5StickCPlus ||
+      M5.getBoard() == m5::board_t::board_M5StickC) {
+    return BRIGHTNESS_ACTIVE_PLUS1;
+  }
+  return BRIGHTNESS_ACTIVE;
+}
+
 static M5Canvas canvas(&M5.Display);
 
 // ---------------------------------------------------------------------------
@@ -363,14 +371,6 @@ static void drawMessageScreen(uint16_t bg, uint16_t fg, const String& title,
     canvas.drawString(line2, W / 2, canvas.height() - 4);
   }
   canvas.pushSprite(0, 0);
-}
-
-static uint8_t targetBrightness() {
-  if (M5.getBoard() == m5::board_t::board_M5StickCPlus ||
-      M5.getBoard() == m5::board_t::board_M5StickC) {
-    return BRIGHTNESS_ACTIVE_PLUS1;
-  }
-  return BRIGHTNESS_ACTIVE;
 }
 
 static void render() {
