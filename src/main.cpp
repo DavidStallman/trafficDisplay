@@ -382,32 +382,21 @@ static void render() {
     return;
   }
 
-  bool active = timeValid() && (inWindow(now) || now < g_manualUntil);
-  M5.Display.setBrightness(active ? BRIGHTNESS_ACTIVE : BRIGHTNESS_IDLE);
+  M5.Display.setBrightness(BRIGHTNESS_ACTIVE);
 
-  if (active) {
-    if (g_error.length() && !g_last.valid) {
-      drawMessageScreen(TFT_NAVY, TFT_WHITE, "Error", g_error, "Retrying...");
-    } else if (g_last.valid) {
-      drawResultScreen(g_last, false);
-    } else {
-      drawMessageScreen(TFT_DARKGREY, TFT_WHITE, "Checking traffic", "Contacting Google Maps...");
-    }
-    return;
-  }
-
-  // Off-hours
   if (!timeValid()) {
     drawMessageScreen(TFT_BLACK, TFT_WHITE, "Starting up",
                       WiFi.status() == WL_CONNECTED ? "Syncing time..." : g_error.length() ? g_error : "Connecting to WiFi...");
     return;
   }
-  String sub = "Weekdays " + fmtHourMin(kWindows[0].sh, kWindows[0].sm) + " - " +
-               fmtHourMin(kWindows[kNumWindows - 1].eh, kWindows[kNumWindows - 1].em);
-  String last = g_last.valid
-                    ? "Last: " + String(roundedMinutes(g_last.durationSec)) + " min @ " + fmtClock(g_last.fetchedAt)
-                    : "Press A to check now";
-  drawMessageScreen(TFT_BLACK, TFT_LIGHTGREY, "Off hours", sub, last);
+
+  if (g_last.valid) {
+    drawResultScreen(g_last, false);
+  } else if (g_error.length()) {
+    drawMessageScreen(TFT_NAVY, TFT_WHITE, "Error", g_error, "Retrying...");
+  } else {
+    drawMessageScreen(TFT_DARKGREY, TFT_WHITE, "Checking traffic", "Contacting Google Maps...");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -438,11 +427,15 @@ static void doFetch(const char* reason) {
 
 static void maybePoll() {
   if (!timeValid()) return;
+  if (g_retryAtMs && (int32_t)(millis() - g_retryAtMs) < 0) return;
   time_t now = time(nullptr);
   long slot = dueCheckKey(now);
-  if (slot < 0) return;
+  if (slot < 0) {
+    // Outside scheduled polling windows: fetch once on boot so we still display round the clock
+    if (!g_last.valid) doFetch("initial");
+    return;
+  }
   if (slot == g_lastPolledSlot) return;
-  if (g_retryAtMs && (int32_t)(millis() - g_retryAtMs) < 0) return;
   doFetch("scheduled");
   if (g_error.length() == 0) g_lastPolledSlot = slot;
 }

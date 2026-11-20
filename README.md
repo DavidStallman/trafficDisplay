@@ -11,7 +11,7 @@ That's 85 checks a day (about 1,850–1,950 a month), well under the free 5,000 
 | 45 – 55 min | 🟨 yellow |
 | over 55 min | 🟥 red |
 
-Outside the window the screen dims and shows "Off hours" plus the last reading.
+The screen stays on round the clock showing the live estimated arrival time and travel time.
 
 **Buttons**
 - **A** (big front button "M5"): fetch now. Works any time, and the colored result stays up for 5 minutes.

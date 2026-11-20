@@ -11,8 +11,9 @@
 // in two windows (e.g. 14:00) is only checked once.
 //   {startHour, startMin, endHour, endMin, intervalMin}
 #define POLL_WINDOWS { \
-    { 8, 0, 14, 0, 15},  /*  8:00 AM - 2:00 PM every 15 min */ \
-    {14, 0, 19, 0,  5},  /*  2:00 PM - 7:00 PM every  5 min */ \
+    { 7, 0, 14, 0, 15},  /*  7:00 AM - 2:00 PM every 15 min */ \
+    {14, 0, 17, 0,  5},  /*  2:00 PM - 4:00 PM every  5 min */ \
+    {17, 0, 23, 0,  20},  /*  2:00 PM - 11:00 PM every  20 min */ \
 }
 // Checks/day with the above: 24 + 61 = 85  (~1,850-1,950 per month on weekdays)
 
