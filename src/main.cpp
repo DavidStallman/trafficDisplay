@@ -14,6 +14,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "config.h"
 #if __has_include("secrets.h")
@@ -143,50 +144,114 @@ static const char* reasonText(int r) {
 }
 
 static bool g_targetIsOpen = false;
+static uint8_t g_bestBssid[6] = {0};
+static int32_t g_bestChannel = 0;
+static bool g_hasBestBssid = false;
 
 static void scanNetworks() {
   Serial.println("[wifi] scanning...");
   int n = WiFi.scanNetworks();
   bool found = false;
+  int bestRssi = -1000;
+  g_hasBestBssid = false;
   for (int i = 0; i < n; i++) {
     bool match = WiFi.SSID(i) == WIFI_SSID;
     found |= match;
-    if (match && WiFi.encryptionType(i) == WIFI_AUTH_OPEN) g_targetIsOpen = true;
+    if (match) {
+      if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) g_targetIsOpen = true;
+      if (WiFi.RSSI(i) > bestRssi && WiFi.BSSID(i) != nullptr) {
+        bestRssi = WiFi.RSSI(i);
+        memcpy(g_bestBssid, WiFi.BSSID(i), 6);
+        g_bestChannel = WiFi.channel(i);
+        g_hasBestBssid = true;
+      }
+    }
     Serial.printf("[wifi]  %s '%s' ch%d rssi=%d enc=%d\n", match ? "*" : " ",
-                  WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i), (int)WiFi.encryptionType(i));
+                  WiFi.SSID(i).c_str(), (int)WiFi.channel(i), (int)WiFi.RSSI(i), (int)WiFi.encryptionType(i));
   }
   Serial.printf("[wifi] scan: %d networks, target %s\n", n, found ? "FOUND" : "NOT FOUND");
   WiFi.scanDelete();
 }
 
-static bool ensureWiFi(uint32_t timeoutMs = 20000) {
+static bool ensureWiFi(uint32_t timeoutMs = 15000) {
   if (WiFi.status() == WL_CONNECTED) return true;
   static bool scanned = false;
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // stay awake on USB power for reliable TLS/HTTP
   if (!scanned) { scanNetworks(); scanned = true; }
-  Serial.printf("[wifi] connecting to '%s'...\n", WIFI_SSID);
+  Serial.printf("[wifi] connecting to '%s' (ch %d)...\n", WIFI_SSID, (int)g_bestChannel);
   WiFi.disconnect(false, false);
   delay(100);
   g_lastDisconnectReason = 0;
-  if (g_targetIsOpen) {
-    Serial.println("[wifi] network is open - connecting without password");
-    WiFi.begin(WIFI_SSID);
+  const char* pass = g_targetIsOpen ? nullptr : WIFI_PASSWORD;
+  if (g_hasBestBssid) {
+    WiFi.begin(WIFI_SSID, pass, g_bestChannel, g_bestBssid);
   } else {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(WIFI_SSID, pass);
   }
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
-    delay(250);
+    delay(200);
     M5.update();
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[wifi] connected, IP %s, RSSI %d\n",
-                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    WiFi.setSleep(false);
+    Serial.printf("[wifi] connected, IP %s, ch %d, RSSI %d\n",
+                  WiFi.localIP().toString().c_str(), (int)WiFi.channel(), (int)WiFi.RSSI());
     return true;
   }
+  // If BSSID-pinned connect failed, rescan next time
+  scanned = false;
   Serial.printf("[wifi] failed, status=%d reason=%d %s\n", (int)WiFi.status(),
                 (int)g_lastDisconnectReason, reasonText(g_lastDisconnectReason));
   return false;
+}
+
+// Parse HTTP "Date: Fri, 20 Nov 2026 16:38:00 GMT" fallback if NTP UDP is slow/blocked
+static void syncTimeFromHttpDate(const String& dateHdr) {
+  if (timeValid() || dateHdr.length() < 25) return;
+  struct tm tmUtc = {};
+  if (strptime(dateHdr.c_str(), "%a, %d %b %Y %H:%M:%S", &tmUtc) == nullptr) return;
+  // Convert UTC struct tm to time_t
+  setenv("TZ", "UTC0", 1);
+  tzset();
+  time_t t = mktime(&tmUtc);
+  setenv("TZ", TZ_INFO, 1);
+  tzset();
+  if (t > 1700000000) {
+    struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+    settimeofday(&tv, nullptr);
+    Serial.println("[time] synced from Google HTTP Date header: " + fmtClock(time(nullptr)));
+  }
+}
+
+static int postComputeRoutes(const String& body, String& resp) {
+  WiFiClientSecure client;
+  client.setInsecure();          // skip cert validation (keeps firmware simple)
+  client.setHandshakeTimeout(8); // 8 s max for TLS handshake (default is 120 s)
+  HTTPClient http;
+  http.setConnectTimeout(8000);  // 8 s max for TCP connect
+  http.setTimeout(10000);        // 10 s max for HTTP response
+  if (!http.begin(client, "https://routes.googleapis.com/directions/v2:computeRoutes")) {
+    return -100;
+  }
+  const char* headerKeys[] = {"Date"};
+  http.collectHeaders(headerKeys, 1);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Goog-Api-Key", GOOGLE_MAPS_API_KEY);
+  http.addHeader("X-Goog-FieldMask",
+                 "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description");
+
+  uint32_t t0 = millis();
+  Serial.printf("[api] POST computeRoutes (RSSI %d)\n", (int)WiFi.RSSI());
+  int code = http.POST(body);
+  if (code > 0 && !timeValid() && http.hasHeader("Date")) {
+    syncTimeFromHttpDate(http.header("Date"));
+  }
+  resp = http.getString();
+  http.end();
+  Serial.printf("[api] HTTP %d, %u bytes in %lu ms\n", code, resp.length(), (unsigned long)(millis() - t0));
+  return code;
 }
 
 static bool fetchRoute(RouteResult& out, String& err) {
@@ -199,19 +264,6 @@ static bool fetchRoute(RouteResult& out, String& err) {
     return false;
   }
 
-  WiFiClientSecure client;
-  client.setInsecure();  // skip cert validation (keeps firmware simple)
-  HTTPClient http;
-  http.setTimeout(15000);
-  if (!http.begin(client, "https://routes.googleapis.com/directions/v2:computeRoutes")) {
-    err = "HTTP begin failed";
-    return false;
-  }
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Goog-Api-Key", GOOGLE_MAPS_API_KEY);
-  http.addHeader("X-Goog-FieldMask",
-                 "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description");
-
   JsonDocument req;
   req["origin"]["address"] = ORIGIN_ADDRESS;
   req["destination"]["address"] = DESTINATION_ADDRESS;
@@ -221,11 +273,17 @@ static bool fetchRoute(RouteResult& out, String& err) {
   String body;
   serializeJson(req, body);
 
-  Serial.println("[api] POST computeRoutes");
-  int code = http.POST(body);
-  String resp = http.getString();
-  http.end();
-  Serial.printf("[api] HTTP %d, %u bytes\n", code, resp.length());
+  String resp;
+  int code = postComputeRoutes(body, resp);
+  if (code <= 0) {
+    // Stale Wi-Fi session or dropped TLS handshake: reconnect Wi-Fi and retry once immediately
+    Serial.println("[api] transport failed, reconnecting WiFi and retrying once...");
+    WiFi.disconnect(false, false);
+    delay(200);
+    if (ensureWiFi(12000)) {
+      code = postComputeRoutes(body, resp);
+    }
+  }
 
   JsonDocument doc;
   DeserializationError jerr = deserializeJson(doc, resp);
@@ -396,16 +454,13 @@ static void render() {
     return;
   }
 
-  if (!timeValid()) {
-    drawMessageScreen(TFT_BLACK, TFT_WHITE, "Starting up",
-                      WiFi.status() == WL_CONNECTED ? "Syncing time..." : g_error.length() ? g_error : "Connecting to WiFi...");
-    return;
-  }
-
   if (g_last.valid) {
     drawResultScreen(g_last, false);
   } else if (g_error.length()) {
     drawMessageScreen(TFT_NAVY, TFT_WHITE, "Error", g_error, "Retrying...");
+  } else if (!timeValid()) {
+    drawMessageScreen(TFT_BLACK, TFT_WHITE, "Starting up",
+                      WiFi.status() == WL_CONNECTED ? "Checking traffic..." : "Connecting to WiFi...");
   } else {
     drawMessageScreen(TFT_DARKGREY, TFT_WHITE, "Checking traffic", "Contacting Google Maps...");
   }
@@ -438,16 +493,19 @@ static void doFetch(const char* reason) {
 }
 
 static void maybePoll() {
-  if (!timeValid()) return;
   if (g_retryAtMs && (int32_t)(millis() - g_retryAtMs) < 0) return;
-  time_t now = time(nullptr);
-  long slot = dueCheckKey(now);
-  if (slot < 0) {
-    // Outside scheduled polling windows: fetch once on boot so we still display round the clock
-    if (!g_last.valid) doFetch("initial");
+  if (!g_last.valid) {
+    // Always do the initial fetch right after boot without waiting for NTP
+    doFetch("initial");
+    if (g_error.length() == 0 && timeValid()) {
+      g_lastPolledSlot = dueCheckKey(time(nullptr));
+    }
     return;
   }
-  if (slot == g_lastPolledSlot) return;
+  if (!timeValid()) return;
+  time_t now = time(nullptr);
+  long slot = dueCheckKey(now);
+  if (slot < 0 || slot == g_lastPolledSlot) return;
   doFetch("scheduled");
   if (g_error.length() == 0) g_lastPolledSlot = slot;
 }
@@ -482,15 +540,16 @@ void setup() {
   configTzTime(TZ_INFO, "pool.ntp.org", "time.google.com", "time.nist.gov");
 
   uint32_t start = millis();
-  while (!timeValid() && millis() - start < 15000) {
-    delay(200);
+  while (!timeValid() && millis() - start < 3000) {
+    delay(100);
     M5.update();
   }
   if (timeValid()) {
-    Serial.println("[boot] time synced: " + fmtClock(time(nullptr)));
+    Serial.println("[boot] time synced via NTP: " + fmtClock(time(nullptr)));
   } else {
-    Serial.println("[boot] time not synced yet");
+    Serial.println("[boot] NTP still pending, will sync from Google HTTP Date header");
   }
+  maybePoll();
   render();
   g_lastDrawMs = millis();
 }
