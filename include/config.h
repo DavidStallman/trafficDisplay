@@ -32,8 +32,11 @@
 #define TZ_INFO             "PST8PDT,M3.2.0,M11.1.0"
 
 // Screen brightness (0-255)
-#define BRIGHTNESS_ACTIVE   3    // ~1%
-#define BRIGHTNESS_IDLE     2
+// Note: M5StickC Plus2 uses linear PWM (3 = ~1%).
+// M5StickC Plus v1.1 uses AXP192 LDO voltage where <35 is below LED turn-on voltage.
+#define BRIGHTNESS_ACTIVE        3    // Plus2 (~1%)
+#define BRIGHTNESS_ACTIVE_PLUS1  60   // Plus v1.1 (low dim level above AXP192 LED turn-on)
+#define BRIGHTNESS_IDLE          2
 
 // Screen orientation (landscape): 1 = USB port on the right, 3 = flipped 180 (USB on the left)
 #define DISPLAY_ROTATION    3

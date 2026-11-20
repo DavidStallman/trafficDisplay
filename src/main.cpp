@@ -365,6 +365,14 @@ static void drawMessageScreen(uint16_t bg, uint16_t fg, const String& title,
   canvas.pushSprite(0, 0);
 }
 
+static uint8_t targetBrightness() {
+  if (M5.getBoard() == m5::board_t::board_M5StickCPlus ||
+      M5.getBoard() == m5::board_t::board_M5StickC) {
+    return BRIGHTNESS_ACTIVE_PLUS1;
+  }
+  return BRIGHTNESS_ACTIVE;
+}
+
 static void render() {
   time_t now = time(nullptr);
 
@@ -377,12 +385,12 @@ static void render() {
     d.distanceM = 45000;
     d.description = "DEMO";
     d.fetchedAt = now;
-    M5.Display.setBrightness(BRIGHTNESS_ACTIVE);
+    M5.Display.setBrightness(targetBrightness());
     drawResultScreen(d, false);
     return;
   }
 
-  M5.Display.setBrightness(BRIGHTNESS_ACTIVE);
+  M5.Display.setBrightness(targetBrightness());
 
   if (!timeValid()) {
     drawMessageScreen(TFT_BLACK, TFT_WHITE, "Starting up",
@@ -451,7 +459,7 @@ void setup() {
   Serial.printf("[boot] board=%d  %s -> %s\n", (int)M5.getBoard(), ORIGIN_ADDRESS, DESTINATION_ADDRESS);
 
   M5.Display.setRotation(DISPLAY_ROTATION);  // landscape, 240x135
-  M5.Display.setBrightness(BRIGHTNESS_ACTIVE);
+  M5.Display.setBrightness(targetBrightness());
   canvas.setColorDepth(16);
   canvas.createSprite(M5.Display.width(), M5.Display.height());
 
