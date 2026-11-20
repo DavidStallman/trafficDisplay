@@ -35,7 +35,7 @@
 // Note: M5StickC Plus2 uses linear PWM (3 = ~1%).
 // M5StickC Plus v1.1 uses AXP192 LDO voltage where <35 is below LED turn-on voltage.
 #define BRIGHTNESS_ACTIVE        3    // Plus2 (~1%)
-#define BRIGHTNESS_ACTIVE_PLUS1  75   // Plus v1.1 (AXP192 LDO backlight)
+#define BRIGHTNESS_ACTIVE_PLUS1  102  // Plus v1.1 (40%, AXP192 LDO backlight)
 #define BRIGHTNESS_IDLE          2
 
 // Screen orientation (landscape): 1 = USB port on the right, 3 = flipped 180 (USB on the left)

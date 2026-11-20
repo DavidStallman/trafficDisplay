@@ -376,6 +376,13 @@ static void drawMessageScreen(uint16_t bg, uint16_t fg, const String& title,
 static void render() {
   time_t now = time(nullptr);
 
+  static uint8_t lastBrt = 0;
+  uint8_t brt = targetBrightness();
+  if (brt != lastBrt) {
+    M5.Display.setBrightness(brt);
+    lastBrt = brt;
+  }
+
   if (g_demoIndex >= 0) {
     static const int demoMins[] = {GREEN_MAX_MIN - 5, (GREEN_MAX_MIN + YELLOW_MAX_MIN) / 2, YELLOW_MAX_MIN + 5};
     RouteResult d;
@@ -385,12 +392,9 @@ static void render() {
     d.distanceM = 45000;
     d.description = "DEMO";
     d.fetchedAt = now;
-    M5.Display.setBrightness(targetBrightness());
     drawResultScreen(d, false);
     return;
   }
-
-  M5.Display.setBrightness(targetBrightness());
 
   if (!timeValid()) {
     drawMessageScreen(TFT_BLACK, TFT_WHITE, "Starting up",
